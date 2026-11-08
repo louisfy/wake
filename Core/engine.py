@@ -20,9 +20,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from discovery import synchronize
+from localization import engine_message, join, language, project_text, tr, use_language
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '1.0'
+VERSION = '1.1'
 FALLBACK_PORTS = range(61910, 61930)
 
 
@@ -38,9 +39,10 @@ def docker_tool():
 
 
 def redact(text):
-    text = re.sub(r'(?i)([?&](?:token|key|secret|password|access_token)=)[^\s&"\']+', r'\1[已隐藏]', text)
-    text = re.sub(r'(?i)(authorization[=: ]+(?:bearer )?)[^\s"\']+', r'\1[已隐藏]', text)
-    text = re.sub(r'(?i)((?:api[_-]?key|secret|password|token)\s*[=:]\s*)[^\s,;]+', r'\1[已隐藏]', text)
+    replacement = r'\1'+tr('[已隐藏]')
+    text = re.sub(r'(?i)([?&](?:token|key|secret|password|access_token)=)[^\s&"\']+', replacement, text)
+    text = re.sub(r'(?i)(authorization[=: ]+(?:bearer )?)[^\s"\']+', replacement, text)
+    text = re.sub(r'(?i)((?:api[_-]?key|secret|password|token)\s*[=:]\s*)[^\s,;]+', replacement, text)
     return text
 
 
@@ -100,6 +102,10 @@ def port_available(port):
     return True
 
 
+class DisplayError(ValueError):
+    """A rendered product diagnostic; do not translate its user-supplied text."""
+
+
 class Manager:
     def __init__(self, config_path=ROOT / 'products.json', runtime=None):
         self.config_path = Path(config_path)
@@ -113,6 +119,7 @@ class Manager:
         self.gate = threading.RLock()
         self.cache = None
         self.cache_time = 0
+        self.cache_language = None
         self.scan_lock = threading.Lock()
         self.sync_lock = threading.Lock()
         self.started = time.time()
@@ -280,7 +287,7 @@ class Manager:
             self.validate(data)
             self.write_config(data)
             self.load()
-        return dict(message='已保存扫描位置；点击检测同步发现产品。')
+        return dict(message=tr('已保存扫描位置；点击检测同步发现产品。'))
 
     def validate(self, data):
         if not isinstance(data.get('products'), list):
@@ -335,7 +342,7 @@ class Manager:
                 restored=json.loads(backup.read_text());self.validate(restored)
                 self.write_config(restored)
                 self.load();history.unlink(missing_ok=True)
-                return dict(ok=True,undone=True,message='已恢复同步前的服务清单；产品文件和运行进程未改动。')
+                return dict(ok=True,undone=True,message=tr('已恢复同步前的服务清单；产品文件和运行进程未改动。'))
             initial=json.loads(before)
             snap=self.snapshot()
             def active(p):
@@ -355,7 +362,7 @@ class Manager:
             for p in updated['products']:
                 try:self.validate(dict(products=[p]));valid.append(p)
                 except (ValueError,TypeError,KeyError):
-                    report['warnings'].append(p.get('name','未知服务')+' 的新配置无法安全识别，已跳过自动更新。')
+                    report['warnings'].append(tr('{name} 的新配置无法安全识别，已跳过自动更新。',name=p.get('name',tr('未知服务'))))
                     if p.get('id') in old_by_id:valid.append(old_by_id[p['id']])
             updated['products']=valid;self.validate(updated)
             valid_ids={p['id'] for p in valid}
@@ -469,6 +476,9 @@ class Manager:
     def inspect(self, p, snap, include_job=True):
         with self.gate:
             job = dict(self.jobs.get(p['id'], {}))
+        if 'message' in job:
+            job['message'] = engine_message(job['message'])
+        note = project_text(p, 'note')
         configured_ports = p.get('reserved_ports', p.get('ports', []))
         option = port_option(p) if include_job else None
         preferred = p['ports'][0] if option is not None else None
@@ -501,49 +511,51 @@ class Manager:
             healthy = not p.get('url') or http_check(p['url'])
             status = 'running' if healthy else 'degraded'
             label = ('应用已打开' if p['kind'] == 'app' and not ports else '运行中') if healthy else '进程在运行，页面未就绪'
-            reason = '进程归属与本机访问检查通过' if ports and healthy else ('已检测到应用进程' if p['kind'] == 'app' else '已检测到网关进程')
+            reason = tr('进程归属与本机访问检查通过' if ports and healthy else ('已检测到应用进程' if p['kind'] == 'app' else '已检测到网关进程'))
             if not healthy:
-                reason = '已确认产品进程，但 HTTP 检查暂未通过；请稍后刷新或查看日志。'
+                reason = tr('已确认产品进程，但 HTTP 检查暂未通过；请稍后刷新或查看日志。')
         elif conflict_ports:
             status, label = 'conflict', '端口被占用'
-            reason = '端口 ' + '、'.join(map(str, conflict_ports)) + ' 正由其他服务使用。'
+            reason = tr('端口 {ports} 正由其他服务使用。', ports=join(map(str, conflict_ports)))
             if option is not None and not pids and not missing and not probe_failed:
                 status, label = 'ready', '可换端口唤醒'
-                reason += '唤醒时会自动使用空闲端口。'
+                reason += tr('唤醒时会自动使用空闲端口。')
         elif pids and p['kind'] == 'process':
             status, label = 'degraded', '进程在运行，端口未就绪'
-            reason = '已检测到该产品进程，正在等待登记端口就绪；可刷新状态或查看启动日志。'
+            reason = tr('已检测到该产品进程，正在等待登记端口就绪；可刷新状态或查看启动日志。')
         elif missing or probe_failed or p['kind'] == 'incomplete':
             status, label = 'incomplete', '部署待完善'
-            reason = ('未通过依赖检查：'+'、'.join(c['label'] for c in probe_checks if not c['ok'])) if probe_failed else p.get('note') or '缺少启动所需的文件或依赖。'
+            reason = (tr('未通过依赖检查：{checks}', checks=join(c['label'] for c in probe_checks if not c['ok']))
+                      if probe_failed else note or tr('缺少启动所需的文件或依赖。'))
         elif agent.get('spawn_failed'):
             status,label='failed','系统启动任务异常'
-            reason='现有系统后台任务未能启动（退出码 %s）；请检查原任务的日志目录权限和启动配置。'%agent.get('exit_code','未知')
+            reason=tr('现有系统后台任务未能启动（退出码 {code}）；请检查原任务的日志目录权限和启动配置。',
+                      code=agent.get('exit_code',tr('未知')))
         else:
             status, label = 'ready', '可唤醒'
-            reason = '启动入口与本地依赖文件已存在；启动后检查实际就绪状态。'
+            reason = tr('启动入口与本地依赖文件已存在；启动后检查实际就绪状态。')
             if p['kind'] == 'docker' and not snap['docker']:
                 status, label = 'blocked', 'Docker 未启动'
-                reason = '可先唤醒 Docker，再检查已有镜像并启动；尚未验证容器部署是否完整。'
+                reason = tr('可先唤醒 Docker，再检查已有镜像并启动；尚未验证容器部署是否完整。')
         if include_job and job.get('state') == 'starting':
-            status, label, reason = 'starting', '正在唤醒', job.get('message', '正在等待服务就绪…')
+            status, label, reason = 'starting', '正在唤醒', job.get('message') or tr('正在等待服务就绪…')
         elif include_job and job.get('state') == 'failed' and not alive:
-            status, label, reason = 'failed', '启动未完成', job.get('message', '请查看启动日志')
+            status, label, reason = 'failed', '启动未完成', job.get('message') or tr('请查看启动日志')
         checks = [{'label':Path(path).name,'path':path,'ok':Path(path).exists()} for path in p.get('required', [])]+probe_checks
         port_note = None
         shared = {port: [other['name'] for other in self.products.values()
                          if other['id'] != p['id'] and port in other.get('reserved_ports', other.get('ports', []))]
                   for port in configured_ports}
-        overlaps = [str(port) + '（' + '、'.join(names) + '）' for port, names in shared.items() if names]
+        overlaps = [f'{port} ({join(names)})' for port, names in shared.items() if names]
         if preferred is not None and ports != [preferred]:
-            port_note = f'当前使用 {ports[0]}，默认端口为 {preferred}。打开按钮会跟随当前地址。'
+            port_note = tr('当前使用 {active}，默认端口为 {preferred}。打开按钮会跟随当前地址。', active=ports[0], preferred=preferred)
         elif overlaps:
-            port_note = '共用配置端口 ' + '、'.join(overlaps) + '。'
+            port_note = tr('共用配置端口 {ports}。', ports=join(overlaps))
             if option is not None:
-                port_note += '唤醒时自动避让占用及固定配置。'
-        note = p.get('note', '')
-        return {k:p[k] for k in ('id','name','description','category','icon','color','root','kind')} | dict(
-            status=status, label=label, reason=reason, ports=ports, url=p.get('url'), pids=pids,
+                port_note += tr('唤醒时自动避让占用及固定配置。')
+        return {k:p[k] for k in ('id','name','icon','color','root','kind')} | dict(
+            description=project_text(p, 'description'), category=project_text(p, 'category'),
+            status=status, label=tr(label), reason=reason, ports=ports, url=p.get('url'), pids=pids,
             deployed=not missing and not probe_failed and p['kind'] != 'incomplete', checks=checks, note=note, port_note=port_note,
             can_start=status in ('ready','blocked','failed') and not pids and (not conflict_ports or option is not None),
             can_open=alive and healthy,
@@ -572,7 +584,7 @@ class Manager:
 
     def scan(self, force=False):
         with self.scan_lock:
-            if not force and self.cache is not None and time.monotonic()-self.cache_time < 3:
+            if not force and self.cache is not None and self.cache_language == language() and time.monotonic()-self.cache_time < 3:
                 return self.cache
             with self.gate, self.startup_lock():
                 self.refresh_startups()
@@ -592,20 +604,20 @@ class Manager:
                     try:
                         plan = self.plan_start(p, snap, option, additional_reserved=previewed)
                     except ValueError as error:
-                        item['port_note'] = str(error)
+                        item['port_note'] = tr(str(error))
                         continue
                     port = plan['ports'][0]
                     previewed.add(port)
                     if port != p['ports'][0]:
                         item['next_port'] = port
-                        item['port_note'] = f"下次唤醒预计使用 {port}，启动前会再次确认端口是否空闲。"
+                        item['port_note'] = tr('下次唤醒预计使用 {port}，启动前会再次确认端口是否空闲。', port=port)
             issues = [dict(port=port, products=configured.get(port, []), blocked=occupied.get(port, []))
                       for port in sorted(configured.keys() | occupied.keys())
                       if len(configured.get(port, [])) > 1 or port in occupied]
             result = dict(products=items, checked_at=time.time(), version=VERSION,
                           port_issues=issues, uptime=int(time.time()-self.started), host=socket.gethostname().split('.')[0],
                           config=str(self.config_path), interval=8, scan_roots=self.config.get('scan_roots',[]))
-            self.cache, self.cache_time = result, time.monotonic()
+            self.cache, self.cache_time, self.cache_language = result, time.monotonic(), language()
             return result
 
     def entry_url(self, p):
@@ -680,7 +692,7 @@ class Manager:
                 self.write_startup(id)
             self.cache_time=0
 
-    def worker(self, p, auto_open, env_port=False):
+    def worker(self, p, auto_open, env_port=False, locale='en'):
         id=p['id']
         try:
             logfile=self.runtime/(id+'.log')
@@ -688,7 +700,8 @@ class Manager:
                 logfile.replace(logfile.with_suffix('.previous.log'))
             with logfile.open('ab',buffering=0) as log:
                 logfile.chmod(0o600)
-                log.write(('\n[%s] 唤醒 %s\n'%(time.strftime('%Y-%m-%d %H:%M:%S'),p['name'])).encode())
+                with use_language(locale):
+                    log.write(('\n[%s] %s\n'%(time.strftime('%Y-%m-%d %H:%M:%S'),tr('启动 {name}',name=p['name']))).encode())
                 for probe in p.get('probes', []):
                     if run(probe['command'], cwd=p['root'], timeout=5).returncode:
                         raise RuntimeError('未通过依赖检查：' + probe['label'])
@@ -809,19 +822,19 @@ class Manager:
     def action(self, id, action, auto_open=True, approval=None):
         if id=='settings' and action=='config':
             run(['/usr/bin/open','-a','TextEdit',str(self.config_path)])
-            return dict(ok=True,message='已打开本地产品清单；保存后点击重新检测。')
+            return dict(ok=True,message=tr('已打开本地产品清单；保存后点击重新检测。'))
         if id not in self.products:
             raise ValueError('未知产品')
         p=self.products[id]
         if action=='reveal':
             run(['/usr/bin/open','-R',p['root']])
-            return dict(ok=True,message='已在 Finder 显示产品位置')
+            return dict(ok=True,message=tr('已在 Finder 显示产品位置'))
         if action=='log':
             path=self.runtime/(id+'.log')
             if not path.exists():
                 raise ValueError('尚无本工作台产生的启动日志')
             run(['/usr/bin/open','-a','TextEdit',str(path)])
-            return dict(ok=True,message='已打开本机日志')
+            return dict(ok=True,message=tr('已打开本机日志'))
         if action not in ('start','open','stop'):
             raise ValueError('不支持的操作')
         # Serialize preflight + reservation for all starts, including products sharing a port.
@@ -840,9 +853,9 @@ class Manager:
                 self.jobs[id].pop('process', None)
                 self.write_startup(id)
                 self.cache_time=0
-                return dict(ok=True,message='已发送停止请求；将继续检测实际状态')
+                return dict(ok=True,message=tr('已发送停止请求；将继续检测实际状态'))
             if item['status']=='starting':
-                return dict(ok=True,queued=True,message='该产品正在唤醒，无需重复点击')
+                return dict(ok=True,queued=True,message=tr('该产品正在唤醒，无需重复点击'))
             if item['can_open']:
                 if action=='open' or auto_open:
                     if self.approval(p)['needs_approval']:
@@ -850,11 +863,11 @@ class Manager:
                             raise ValueError('首次打开此产品，请先在详情中审查并确认入口。')
                         self.approve(p, approval)
                     self.open_product(at_port(p,item['ports'][0]) if option is not None else p)
-                return dict(ok=True,message='已打开产品' if action=='open' or auto_open else '服务已在运行')
+                return dict(ok=True,message=tr('已打开产品' if action=='open' or auto_open else '服务已在运行'))
             if action=='open':
                 raise ValueError('服务尚未就绪，请先唤醒')
             if not item['can_start'] or not item['deployed']:
-                raise ValueError(item['reason'])
+                raise DisplayError(item['reason'])
             if option is not None and item['pids']:
                 raise ValueError('已检测到该产品的进程，请先检查现有实例是否就绪。')
             suggested=next((item.get('next_port') for item in (self.cache or {}).get('products',[])
@@ -871,10 +884,12 @@ class Manager:
             self.reserve_startup(id)
             self.cache_time=0
             try:
-                threading.Thread(target=self.worker,args=(planned,auto_open,option if isinstance(option,str) else None),daemon=False).start()
+                threading.Thread(target=self.worker,args=(planned,auto_open,option if isinstance(option,str) else None),
+                                 kwargs={'locale':language()},daemon=False).start()
             except BaseException:
                 self.jobs[id].update(state='failed',message='无法开始本次启动，请重试。')
                 self.write_startup(id)
                 self.startup_leases.pop(id).close()
                 raise
-            return dict(ok=True,queued=True,message=message if switched else '正在唤醒，就绪后'+('自动打开' if auto_open else '更新状态'))
+            return dict(ok=True,queued=True,message=engine_message(message) if switched else
+                        tr('正在唤醒，就绪后自动打开' if auto_open else '正在唤醒，就绪后更新状态'))

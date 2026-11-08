@@ -1,36 +1,27 @@
-# 发布前本机体验清单
+# Release acceptance
 
-自动化检查不能代替维护者实际体验。候选版通过这些操作后，再决定提交和公开发布。
+[中文](zh-CN/acceptance.md)
 
-## 首次使用
+Use an isolated data directory and synthetic services. Record the exact build and macOS version.
 
-- 使用空数据目录启动，只有一个主窗口，显示选择文件夹入口。
-- 未选择目录时不自动扫描下载、文稿或用户根目录。
-- 选择 `examples/demo-service`，设置中能回读该目录；取消选择不改变配置。
-- 检测同步发现一张示例卡片，首次点击进入命令审查，而非直接启动。
-- 设置里添加、移除扫描目录可保存；移除不删除项目文件。
+## First launch and language
 
-## 服务与恢复
+- A clean launch opens one window in English with an empty inventory and a folder picker. Wake does not scan personal folders before selection.
+- Choose **examples/demo-service**, click **Scan & Sync**, and verify the card and sync report. **Review** shows the launch command.
+- Open Settings and switch English → 简体中文 → English. Check the search, filters, settings, menu actions, project statuses, sync report, and launch prompts.
+- Reopen and check that the selected language persists. Check long paths, button labels, the smallest window, and keyboard navigation in both languages.
 
-- 确认信任后启动示例，页面可打开，显示真实运行状态。
-- 退出并重新打开唤醒，示例仍可访问，未重复启动。
-- 详情中停止归属已核验的示例，状态最终显示未运行。
-- 明确修改启动命令并重新同步，需要重新审查。
-- 端口被合成进程占用时，可切换的服务避让端口，固定端口产品显示冲突。
-- 离线不影响纯本机示例的检测和启动。
+## Services and recovery
 
-## 界面
+- Trust the sample and start it. Verify its localhost response and running status.
+- Change language while it runs. The same process remains reachable and the status label changes.
+- Quit and reopen Wake. The service still responds and is not started again. Stop it from details and verify the endpoint shuts down.
+- Modify a synthetic launch command and verify Wake requires another review.
+- Use synthetic listeners to exercise shared and occupied ports. Eligible services can switch ports; fixed deployments show a conflict.
+- Verify adding and removing scan folders, syncing and undoing changes, and an offline sample launch.
 
-- 最小窗口、长名称和长路径没有按钮挤压或宽高不一致。
-- 搜索、过滤、滚动、详情、设置和同步结果没有重叠弹窗。
-- 键盘操作与关闭窗口符合预期；本期只验收浅色模式。
+## Publication
 
-## 发行对象
-
-- 所有测试通过，源码及最终 ZIP 模式检查通过。
-- 归档中产品种子和扫描位置为空，无个人数据、日志、证书或旧安装包。
-- 核对实际提交文件、README、图片与 Release 文案，无真实设备信息或业务数据。
-- 明确版本、CPU、最低系统目标、实际测试环境和已知限制。
-- 源码和本机测试包与经过签名公证的公开二进制区分标注。
-
-macOS 14/15 和 Intel 未实际验收时，不以编译目标或代码分支推定已验证支持。未完成项写入 Release 已知限制。
+- Run tests, build, and scan the exact staged tree and archives. Confirm the seed and migration are empty and no runtime records or signing material are included.
+- Review English and Chinese docs, release text, and images. Use synthetic projects for screenshots and strip unnecessary metadata.
+- State the architecture, deployment target, observed runtime environment, and any limits. Do not claim macOS 14/15 or Intel verification without testing those systems. Label a source release separately from a notarized binary.

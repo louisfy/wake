@@ -1,11 +1,13 @@
-# 安全问题
+# Security
 
-当前维护版本为 1.0。本项目尚未建立有时效承诺的安全响应服务。
+[中文](docs/zh-CN/SECURITY.md)
 
-请勿在公开 Issue 中提交凭据、真实本机路径、原始日志或未公开的可利用细节。仓库启用 GitHub Private vulnerability reporting 后，使用 Security 页的 “Report a vulnerability”。尚未启用时，请先通过不含敏感信息的 Issue 请求私下联系渠道；不要猜测维护者邮箱。
+The maintained release is Wake 1.1. The project does not promise a response time.
 
-安全报告可包括受影响版本、合成环境、最小复现和影响范围。请勿以验证漏洞为由读取他人数据或执行真实部署命令。
+Please keep credentials, real local paths, raw logs, and undisclosed exploit details out of public issues. If GitHub private vulnerability reporting is available, use **Security → Report a vulnerability**. Otherwise, open a public issue requesting a private reporting channel without sensitive details.
 
-唤醒不是沙箱、容器隔离系统或恶意代码检测器。它可以运行用户信任的本地命令，权限与当前用户相同。项目命令可能启动其他程序或访问网络。首次命令审查是执行前的知情选择，不能证明项目内容安全。
+A useful report includes the affected version, a synthetic setup, minimal reproduction steps, and impact. Use test data and systems you are authorized to inspect.
 
-发行签名与公证状态按每次 Release 单独说明。本地 ad hoc 签名不等于 Apple Developer ID 签名或公证；不要为运行来源不明的软件关闭系统安全功能。
+Wake runs trusted local commands as your user. It is not a sandbox, container isolation layer, or malware detector. Review the command and trust the project directory before proceeding. Review does not prove that project code is safe.
+
+Each release states its distribution and signing status. Ad hoc signatures on local builds are distinct from Developer ID signing and Apple notarization.

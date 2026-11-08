@@ -1,18 +1,18 @@
 ---
-name: 故障反馈 / Bug report
-about: 用合成项目描述问题，不提交真实配置与原始日志
+name: Bug report / 故障反馈
+about: Reproduce a problem with a synthetic project
 ---
 
-请勿附带个人目录、产品清单、登录链接、环境变量、业务数据或原始日志。截图也请使用示例项目并检查敏感内容。
+English and 简体中文 are welcome. 请只使用合成示例。
 
-**版本与环境**
+**Version and environment / 版本与环境**
 
-唤醒版本、macOS 版本、CPU 类型、源码自构建或发行包。
+Wake version, macOS version, CPU, and how you built or installed it.
 
-**复现步骤**
+**Steps to reproduce / 复现步骤**
 
-尽量使用 `examples/demo-service` 或最小合成项目。
+Use **examples/demo-service** or a minimal synthetic project.
 
-**预期和实际结果**
+**Expected and actual result / 预期和实际结果**
 
-描述可观察行为，必要时提供已人工脱敏的短错误消息。
+Describe what you observed. Share only a short, manually sanitized error if necessary. Keep real paths, logs, sign-in links, environment variables, and data out of the report.

@@ -26,27 +26,30 @@ final class ServiceBridge: @unchecked Sendable {
         self.dataDirectory = dataDirectory
     }
 
-    func request<T: Decodable>(_ method: String, parameters: [String: Any] = [:], as type: T.Type) async throws -> T {
+    func request<T: Decodable>(_ method: String, parameters: [String: Any] = [:],
+                               language: WakeLanguage = .current, as type: T.Type) async throws -> T {
         let requestID = UUID().uuidString
-        var message = try JSONSerialization.data(withJSONObject: ["id": requestID, "method": method, "params": parameters])
+        var message = try JSONSerialization.data(withJSONObject: [
+            "id": requestID, "method": method, "params": parameters, "language": language.rawValue
+        ])
         message.append(10)
         let request = message
         let result: Data = try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
                 do {
-                    guard !self.closed else { throw WakeError(message: "唤醒已退出。") }
+                    guard !self.closed else { throw WakeError(message: l("Wake has quit.", language: language)) }
                     if self.process?.isRunning != true { try self.start() }
-                    guard let input = self.input else { throw WakeError(message: "本机操作暂不可用，请重新检测。") }
+                    guard let input = self.input else { throw WakeError(message: l("The local engine is unavailable. Try refreshing.", language: language)) }
                     self.callbacks[requestID] = { continuation.resume(with: $0) }
                     try input.write(contentsOf: request)
                     let timeout: TimeInterval = method == "sync" ? 90 : 45
                     self.queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
-                        self?.callbacks.removeValue(forKey: requestID)?(.failure(WakeError(message: "本机操作等待超时，请重新检测。")))
+                        self?.callbacks.removeValue(forKey: requestID)?(.failure(WakeError(message: l("The local operation timed out. Try refreshing.", language: language))))
                     }
                 } catch {
                     if let callback = self.callbacks.removeValue(forKey: requestID) {
                         callback(.failure(error))
-                        self.disconnect("本机连接已断开，重新检测可恢复。")
+                        self.disconnect(l("The local connection was lost. Refresh to reconnect."))
                     }
                     else { continuation.resume(throwing: error) }
                 }
@@ -56,7 +59,7 @@ final class ServiceBridge: @unchecked Sendable {
     }
 
     private func start() throws {
-        disconnect("本机连接已重建，请重新检测。")
+        disconnect(l("The local connection was reset. Try refreshing."))
         let fm = FileManager.default
         try fm.createDirectory(at: dataDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let log = dataDirectory.appendingPathComponent("Wake.log")
@@ -91,7 +94,7 @@ final class ServiceBridge: @unchecked Sendable {
             if length > 0 {
                 self.consume(Data(bytes.prefix(length)))
             } else if length == 0 || errno != EINTR {
-                self.disconnect("本机操作已结束，重新检测可恢复。")
+                self.disconnect(l("The local engine stopped. Refresh to reconnect."))
             }
         }
         source.setCancelHandler { try? outputHandle.close() }
@@ -102,7 +105,7 @@ final class ServiceBridge: @unchecked Sendable {
     private func consume(_ data: Data) {
         buffer.append(data)
         guard buffer.count <= 8 * 1024 * 1024 else {
-            disconnect("本机返回的数据异常，请重新检测。")
+            disconnect(l("The local response was too large. Try refreshing."))
             return
         }
         while let end = buffer.firstIndex(of: 10) {
@@ -110,7 +113,7 @@ final class ServiceBridge: @unchecked Sendable {
             buffer.removeSubrange(...end)
             guard let decoded = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                   let id = decoded["id"] as? String else {
-                disconnect("本机返回的数据无法读取，请重新检测。")
+                disconnect(l("The local response could not be read. Try refreshing."))
                 return
             }
             guard let callback = callbacks.removeValue(forKey: id) else { continue }
@@ -118,7 +121,7 @@ final class ServiceBridge: @unchecked Sendable {
                let encoded = try? JSONSerialization.data(withJSONObject: result) {
                 callback(.success(encoded))
             } else {
-                callback(.failure(WakeError(message: decoded["error"] as? String ?? "本机操作未完成。")))
+                callback(.failure(WakeError(message: decoded["error"] as? String ?? l("The local operation did not finish."))))
             }
         }
     }
@@ -148,7 +151,7 @@ final class ServiceBridge: @unchecked Sendable {
             // EOF lets accepted startup tasks finish before the controller exits.
             // Product processes already have detached sessions and their own logs.
             closed = true
-            disconnect("唤醒已退出。")
+            disconnect(l("Wake has quit."))
         }
     }
 }

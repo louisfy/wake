@@ -58,6 +58,12 @@ struct BridgeChecks {
                   text.contains("False"), text.contains("True") else {
                 fatalError("manual refresh was dropped while automatic refresh was active")
             }
+        } else if scenario == "language" {
+            let chinese = try await bridge.request("info", language: .simplifiedChinese, as: EngineInfo.self)
+            let english = try await bridge.request("info", language: .english, as: EngineInfo.self)
+            guard chinese.version == "zh-Hans", english.version == "en", chinese.pid == english.pid else {
+                fatalError("language was not forwarded on the same pipe")
+            }
         }
         print("PASS")
     }
@@ -79,7 +85,7 @@ for line in sys.stdin:
         print('invalid-json', flush=True)
         continue
     if method == 'info':
-        result = dict(version='fixture', transport='private-pipe', pid=os.getpid())
+        result = dict(version=request.get('language', 'fixture'), transport='private-pipe', pid=os.getpid())
     elif method == 'products':
         with (directory/'refreshes.txt').open('a') as file:
             file.write(str(request.get('params', {}).get('refresh', False))+'\n')
@@ -106,7 +112,7 @@ class SwiftBridgeTests(unittest.TestCase):
         cache = cls.root/'swift-cache'
         cache.mkdir(parents=True,exist_ok=True)
         command = ['xcrun','swiftc','-parse-as-library','-O','-module-cache-path',str(cache),
-                   str(SOURCE/'ServiceBridge.swift'),str(SOURCE/'Models.swift'),str(main),
+                   str(SOURCE/'ServiceBridge.swift'),str(SOURCE/'Models.swift'),str(SOURCE/'Localization.swift'),str(main),
                    '-o',str(cls.executable)]
         result = subprocess.run(command,capture_output=True,text=True,timeout=90)
         if result.returncode:
@@ -141,6 +147,9 @@ class SwiftBridgeTests(unittest.TestCase):
 
     def test_manual_refresh_is_queued_behind_an_automatic_refresh(self):
         self.check('queued-refresh')
+
+    def test_language_is_forwarded_per_request_without_reconnecting(self):
+        self.check('language')
 
 
 if __name__ == '__main__':

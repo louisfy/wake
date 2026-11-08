@@ -1,37 +1,39 @@
-# 使用与配置
+# Use and configure Wake
 
-## 扫描目录
+[中文](zh-CN/configuration.md)
 
-首次使用选择文件夹；之后可在设置中添加或移除，最多 16 个。只有明确选择的位置会用于新增发现。已登记的服务仍可从其原位置更新状态，移除扫描位置不会删除已有卡片或产品文件。
+## Language
 
-扫描默认最多四层，有目录数量和时间上限，会跳过依赖、构建目录和常见示例目录。未找到所有产品时，选择更接近实际部署入口的位置。权限不足会保留既有清单，不将不可访问误当成删除。
+Wake starts in English. Choose **English** or **简体中文** under **Settings → Language**. App labels, notices, and generated service statuses switch in the current session. The choice persists across launches. macOS-managed dialog controls follow the system language. Text supplied by a project, such as its name, description, command, or log output, stays as supplied.
 
-点击「检测同步」会保存清单备份，并展示新增、更新和移除记录；最近一次同步可撤销。如果清单之后被手动修改，撤销会拒绝覆盖这些改动。
+## Scan folders
 
-## 自动发现与手动清单
+Choose your first folder in the empty workbench. Add or remove up to 16 folders in Settings. New discovery is limited to selected folders. Existing cards can still refresh after you remove a scan folder; removing it does not delete project files or existing cards.
 
-支持可识别的 `package.json` 服务、部分 Python 服务、Compose 文件和 `.launchpad.json`。依赖仍需由产品自身部署流程准备。复杂 Compose 变量端口、组合启动脚本或未知入口可能标记为待完善，需要用户核对。
+Scanning defaults to four levels and uses directory and time limits. It skips common dependency, build, and example folders. If a project is missing, select a folder closer to its entry. Wake preserves known entries if it cannot access their folder.
 
-显式清单例子位于 `examples/demo-service/.launchpad.json`。配置中：
+**Scan & Sync** backs up the inventory and reports added, updated, and removed cards. You can undo the latest sync as long as the inventory has not been edited afterward.
 
-- `command` 是参数数组，不是传给 shell 的拼接字符串；命令相对路径按产品工作目录解释。
-- `ports` 为本机服务端口；网页 `url` 只允许登记端口上的 `http://127.0.0.1` 或 `http://localhost`，不接受 URL 用户名密码。
-- `required` 中相对路径按清单所在目录解析。
-- `match` 与 `cwd_match` 用于进程归属识别；宽泛匹配可能产生歧义，应同时核对工作目录。
-- `port_strategy: {"environment":"PORT"}` 声明产品确实支持通过该环境变量选端口。只对支持这种约定的项目填写；唤醒不会自动改写产品源码。
+## Discovery and explicit manifests
 
-Vite 的明确 `--port` / `--strictPort` 启动方式支持端口避让。固定端口和复杂容器部署不会自动重写。切换端口后会检查实际监听和本机响应，打开入口随当前端口变化。
+Wake detects supported **package.json** scripts, Python services, Compose files, and **.launchpad.json** manifests. Install dependencies using the project's own instructions. Ambiguous Compose ports, combined scripts, and unrecognized launch entries may require manual setup.
 
-## 信任与退出
+See [the demo manifest](../examples/demo-service/.launchpad.json):
 
-首次启动查看产品目录和命令，再点击「信任并唤醒」。信任保存在私有运行目录，发现的清单不能自行声明已信任。命令或已检测到的启动描述指纹变化时需重新确认。
+- **command** is an argument array. Relative command paths resolve in the project working directory.
+- **ports** lists local service ports. The browser **url** must use a registered port on **http://127.0.0.1** or **http://localhost**, with no embedded credentials.
+- **required** lists dependencies. Relative paths resolve from the manifest's folder.
+- **match** and **cwd_match** identify the project process. Pair command patterns with a working directory to avoid ambiguous matches.
+- **port_strategy: {"environment":"PORT"}** opts in only when the service can actually read that environment variable.
 
-信任表示信任该项目目录内的代码，不保证每一次代码内容变化都会被识别，也不限制它的网络或文件权限。需要撤销全部启动信任时，退出唤醒并删除本机数据目录中的 `Runtime/approvals.json`；不需要删除产品清单。
+Vite with explicit **--port** and **--strictPort** can use an alternate port. Wake does not rewrite fixed ports or complex container deployments. Open follows the verified current port.
 
-退出唤醒不会停止已启动的服务。只有由唤醒启动并核实 PID、命令指纹和进程创建时间的直接进程才提供停止能力。外部启动、复杂包装脚本或未保存归属的服务，需使用原产品自身的停止方式。
+## Trust, exit, and stop
 
-## 本机数据
+Review the command and directory before clicking **Trust & Start**. Wake asks again when the launch configuration or detected entry fingerprint changes. Trust does not sandbox the command or guarantee detection of every code change. To reset all launch trust, quit Wake and remove **Runtime/approvals.json** from your local Wake data directory.
 
-默认目录为 `~/Library/Application Support/Wake/`。设置中的「编辑产品清单」用于高级调整，保存后刷新或检测同步。不要把真实配置、登录入口文件和日志复制进仓库。
+Quitting Wake leaves started services running. **Stop Service** is available when Wake can verify a direct process it started. For external or wrapped processes, use the project's own stop mechanism.
 
-开发隔离测试可通过 `WAKE_DATA_DIR` 指定绝对数据目录，不需要也不应自动复制历史个人版本的数据。
+## Local files
+
+Data is stored by default in **~/Library/Application Support/Wake/**. Advanced users can open **Settings → Edit Inventory**, save their edits, and refresh. Set **WAKE_DATA_DIR** to an absolute test path to use separate state. Never copy a real inventory, sign-in entry file, or launch log into the repository.

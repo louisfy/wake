@@ -28,11 +28,61 @@ class NativePipeTests(unittest.TestCase):
             )
             result = subprocess.run(
                 [sys.executable,'-I','-S','-B','-c',driver,'--data-dir',str(root/'data'),'--seed',str(seed)],
-                input=json.dumps(dict(id='probe',method='products'))+'\n',capture_output=True,text=True,timeout=8)
-            response = json.loads(result.stdout)
-            self.assertFalse(response['ok'])
-            self.assertIn('文件夹访问权限',response['error'])
-            self.assertIn('系统设置',response['error'])
+                input=''.join(json.dumps(dict(id=locale,method='products',language=locale))+'\n'
+                              for locale in ('en','zh-Hans')),capture_output=True,text=True,timeout=8)
+            replies = {reply['id']:reply for reply in map(json.loads,result.stdout.splitlines())}
+            self.assertFalse(replies['en']['ok'])
+            self.assertFalse(replies['zh-Hans']['ok'])
+            self.assertIn('System Settings',replies['en']['error'])
+            self.assertIn('文件夹访问权限',replies['zh-Hans']['error'])
+
+    def test_switch_language_without_restarting_engine_or_editing_project_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            projects = root/'projects'
+            automatic = projects/'python-demo'
+            explicit = projects/'manifest-demo'
+            automatic.mkdir(parents=True)
+            explicit.mkdir()
+            (automatic/'server.py').write_text('from http.server import HTTPServer\nPORT=62991\nHTTPServer(("127.0.0.1",PORT),None)\n')
+            (explicit/'.launchpad.json').write_text(json.dumps(dict(
+                name='我的项目',description='Python 本地服务',note='我自己写的备注',
+            )))
+            seed = root/'seed.json'
+            seed.write_text(json.dumps(dict(products=[],scan_roots=[str(projects),str(root/'missing')])))
+            data = root/'data'
+            with subprocess.Popen([sys.executable,'-I','-S','-B',str(CORE/'ipc.py'),
+                                   '--data-dir',str(data),'--seed',str(seed)],
+                                  stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True) as child:
+                def request(method, locale=None, **params):
+                    child.stdin.write(json.dumps(dict(id=method,method=method,language=locale,params=params))+'\n')
+                    child.stdin.flush()
+                    return json.loads(child.stdout.readline())
+
+                try:
+                    info = request('info')['result']
+                    report = request('sync',mode='sync')['result']['report']
+                    self.assertEqual(len(report['added']),2)
+                    self.assertIn('Scan folder unavailable',report['warnings'][0])
+                    stored = (data/'products.json').read_bytes()
+                    en = {p['name']:p for p in request('products')['result']['products']}
+                    zh = {p['name']:p for p in request('products','zh-Hans')['result']['products']}
+                    fallback = {p['name']:p for p in request('products','unsupported')['result']['products']}
+                    self.assertEqual(en['python-demo']['description'],'Local Python service')
+                    self.assertEqual(zh['python-demo']['description'],'Python 本地服务')
+                    self.assertEqual(en['python-demo']['label'],'Setup incomplete')
+                    self.assertEqual(zh['python-demo']['label'],'部署待完善')
+                    self.assertEqual(en['python-demo']['approval_fingerprint'],zh['python-demo']['approval_fingerprint'])
+                    self.assertEqual(en['我的项目']['description'],'Python 本地服务')
+                    self.assertEqual(en['我的项目']['reason'],'我自己写的备注')
+                    self.assertEqual(fallback['python-demo']['label'],en['python-demo']['label'])
+                    self.assertEqual(request('action','en',id='unknown',action='open')['error'],'Unknown project.')
+                    self.assertEqual(request('action','zh-Hans',id='unknown',action='open')['error'],'未知产品')
+                    self.assertEqual(request('info','zh-Hans')['result']['pid'],info['pid'])
+                    self.assertEqual((data/'products.json').read_bytes(),stored)
+                finally:
+                    child.stdin.close()
+                    child.wait(timeout=15)
 
     def test_quit_during_startup_and_reopen_without_starting_twice(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -57,10 +107,15 @@ class NativePipeTests(unittest.TestCase):
             seed = root/'seed.json'
             seed.write_text(json.dumps(dict(products=[product],scan_roots=[str(root)])))
             data = root/'data'
+            resume = root/'resume-launch'
             driver = (
-                f'import sys,time;sys.path.insert(0,{str(CORE)!r});import engine,ipc\n'
+                f'import sys,time;from pathlib import Path;sys.path.insert(0,{str(CORE)!r});import engine,ipc\n'
+                f'resume=Path({str(resume)!r})\n'
                 'original=engine.Manager.worker\n'
-                'def delayed(self,*args):\n time.sleep(1.5)\n return original(self,*args)\n'
+                'def delayed(self,*args,**kwargs):\n'
+                ' deadline=time.monotonic()+15\n'
+                ' while not resume.exists() and time.monotonic()<deadline: time.sleep(.02)\n'
+                ' return original(self,*args,**kwargs)\n'
                 'engine.Manager.worker=delayed\nipc.main()\n'
             )
             def start_controller():
@@ -89,6 +144,7 @@ class NativePipeTests(unittest.TestCase):
                 second = start_controller()
                 self.assertEqual(request(second,'products')['products'][0]['status'],'starting')
                 self.assertTrue(request(second,'action',id='lifecycle',action='start',open=False)['queued'])
+                resume.touch()
                 first.wait(timeout=20)
                 self.assertEqual(first.returncode,0,first.stderr.read())
                 self.assertTrue(ready(),'accepted startup was lost after app pipe closed')

@@ -1,7 +1,7 @@
 {
-  "name": "示例服务",
-  "description": "用于本机体验的合成 HTTP 服务",
-  "category": "示例",
+  "name": "Demo Service",
+  "description": "Synthetic HTTP service for trying Wake",
+  "category": "Example",
   "ports": [61935],
   "url": "http://127.0.0.1:61935/",
   "command": ["python3", "-B", "server.py"],

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1 — English by default
+
+- Default to English with an immediate English / Simplified Chinese switch in Settings.
+- Localize status, scan reports, port diagnostics, trust prompts, menu actions, and Wake-generated launch messages.
+- Preserve project metadata, launch trust, and running services when changing language.
+- Lead with English GitHub docs and screenshots while retaining Simplified Chinese guides.
+- Package the app as Wake.app, keeping the application ID and existing install data.
+
 ## 1.0 — First public release
 
 - Independent source tree with MIT license, contributor guidance and publication materials.

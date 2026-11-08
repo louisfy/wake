@@ -27,13 +27,16 @@ final class WakeDelegate: NSObject, NSApplicationDelegate {
         self.store = store
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "唤醒"
+        window.title = l("Wake")
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.appearance = NSAppearance(named: .aqua)
         window.backgroundColor = .white
         window.contentMinSize = NSSize(width: 650, height: 510)
-        window.contentView = NSHostingView(rootView: WakeView(store: store))
+        window.contentView = NSHostingView(rootView: WakeView(store: store, onLanguageChange: { [weak self] in
+            self?.window?.title = l("Wake")
+            self?.installMenu()
+        }))
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("Wake.MainWindow")
         if !window.setFrameUsingName("Wake.MainWindow") { window.center() }
@@ -77,8 +80,9 @@ final class WakeDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             let alert = NSAlert()
-            alert.messageText = "无法打开唤醒"
-            alert.informativeText = "本地数据目录暂时无法使用。\n\(error.localizedDescription)"
+            alert.messageText = l("Could not open Wake")
+            alert.informativeText = l("The local data folder is unavailable.\n%@", error.localizedDescription)
+            alert.addButton(withTitle: l("OK"))
             alert.runModal()
         }
         NSApp.terminate(nil)
@@ -93,23 +97,23 @@ final class WakeDelegate: NSObject, NSApplicationDelegate {
     private func installMenu() {
         let bar = NSMenu()
         let app = NSMenuItem(); bar.addItem(app)
-        let appMenu = NSMenu(title: "唤醒"); app.submenu = appMenu
-        appMenu.addItem(withTitle: "关于唤醒", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let appMenu = NSMenu(title: l("Wake")); app.submenu = appMenu
+        appMenu.addItem(withTitle: l("About Wake"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(item("设置…", #selector(openSettings), ","))
+        appMenu.addItem(item(l("Settings…"), #selector(openSettings), ","))
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出唤醒", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: l("Quit Wake"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let edit = NSMenuItem(); bar.addItem(edit)
-        let editMenu = NSMenu(title: "编辑"); edit.submenu = editMenu
-        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        let editMenu = NSMenu(title: l("Edit")); edit.submenu = editMenu
+        editMenu.addItem(withTitle: l("Undo"), action: Selector(("undo:")), keyEquivalent: "z")
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: l("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: l("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: l("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: l("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(.separator())
-        editMenu.addItem(item("搜索产品", #selector(focusSearch), "f"))
-        editMenu.addItem(item("刷新状态", #selector(refresh), "r"))
+        editMenu.addItem(item(l("Find Projects"), #selector(focusSearch), "f"))
+        editMenu.addItem(item(l("Refresh Status"), #selector(refresh), "r"))
         NSApp.mainMenu = bar
     }
 

@@ -8,6 +8,7 @@ import plistlib
 import re
 import shutil
 import time
+from localization import tr
 
 IGNORED={'node_modules','.git','.venv','venv','vendor','dist','build','target','.next','__pycache__',
          'Codex','outputs','deliverables','交付','tests','test','fixtures','examples','docs','packages',
@@ -237,13 +238,15 @@ def explicit_service(root):
     p=base(root,data.get('kind','process'),marker,'manifest:'+str(data.get('id') or canonical(root)))
     allowed={'name','description','category','icon','color','kind','ports','url','command','required',
              'match','cwd','cwd_match','note','compose','reserved_ports','app','open_app','port_strategy'}
+    p['discovery']['manifest_text']=sorted(data.keys() & {'description','category','note'})
     for key in allowed:
         if key in data:p[key]=copy.deepcopy(data[key])
     for key in ('cwd','cwd_match','compose','app','open_app'):
         if key in p and not os.path.isabs(p[key]):p[key]=str(root/p[key])
     p['required']=[str(root/x) if not os.path.isabs(x) else x for x in p.get('required',[])]
     if not p.get('ports') and not p.get('app') and not p.get('open_app'):
-        p.update(kind='incomplete',note='产品清单未声明可核验的服务端口或应用入口。')
+        p['kind']='incomplete'
+        p.setdefault('note','产品清单未声明可核验的服务端口或应用入口。')
     return p
 
 
@@ -339,12 +342,12 @@ def synchronize(config, app_root, is_active=None, live_ports=None):
         scan_root=Path(value).expanduser()
         if not scan_root.is_dir():
             unavailable.append(canonical(scan_root))
-            warnings.append('扫描位置不可用，未据此删除清单：'+str(scan_root));continue
-        def error(e):warnings.append('无法读取目录，已保留相关清单：'+str(e.filename))
+            warnings.append(tr('扫描位置不可用，未据此删除清单：{folder}',folder=scan_root));continue
+        def error(e):warnings.append(tr('无法读取目录，已保留相关清单：{folder}',folder=e.filename))
         for base_path,dirs,files in os.walk(scan_root,onerror=error,followlinks=False):
             root=Path(base_path);visited+=1
             if visited>12000 or time.monotonic()-start>15:
-                warnings.append('达到本次扫描上限，已有服务已保留；可缩小扫描范围后重试。');dirs[:]=[];break
+                warnings.append(tr('达到本次扫描上限，已有服务已保留；可缩小扫描范围后重试。'));dirs[:]=[];break
             if any(inside(root,x) for x in ignore_roots):dirs[:]=[];continue
             owners=[x for x in owned if inside(root,x)]
             if owners:
@@ -394,9 +397,9 @@ def synchronize(config, app_root, is_active=None, live_ports=None):
             updated.append({'id':id,'name':moved['name'],'fields':['root','command','required']});continue
         marker_missing=meta.get('auto') and meta.get('source') and absent(meta['source']) and item is None
         if ((absent(old['root']) and item is None) or marker_missing) and not active:
-            removed.append({'id':id,'name':old['name'],'reason':'部署目录或自动发现的启动入口已删除'});continue
+            removed.append({'id':id,'name':old['name'],'reason':tr('部署目录或自动发现的启动入口已删除')});continue
         if absent(old['root']) and active:
-            warnings.append(old['name']+' 的目录已移除，但服务仍在运行；卡片暂时保留。')
+            warnings.append(tr('{name} 的目录已移除，但服务仍在运行；卡片暂时保留。',name=old['name']))
         if item and meta.get('auto'):
             item=copy.deepcopy(item);item['id']=id
             generated={k:copy.deepcopy(v) for k,v in item.items() if k!='discovery'}

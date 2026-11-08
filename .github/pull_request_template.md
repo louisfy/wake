@@ -1,13 +1,13 @@
-## 变更与原因
+## Change and reason / 变更与原因
 
-说明触发问题、最终行为及必要的取舍。
+Describe the trigger and what changes for the user.
 
-## 验证
+## Verification / 验证
 
-写明测试、构建、真实操作的结果和适用环境；尚未验证的部分单独说明。
+List what you tested, on which environment, and what remains unverified.
 
-## 隐私
+## Privacy / 隐私
 
-- [ ] 仅使用合成配置与示例，已审查实际 diff、截图和文案。
-- [ ] 没有用户绝对路径、真实日志、凭据、签名材料或个人产品清单。
-- [ ] 新文件符合公开文件范围，源码隐私检查通过。
+- [ ] Examples and screenshots use synthetic data.
+- [ ] The actual diff contains no private paths, inventories, logs, credentials, or signing material.
+- [ ] The source privacy check passes.

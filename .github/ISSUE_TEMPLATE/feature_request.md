@@ -1,12 +1,12 @@
 ---
-name: 功能建议 / Feature request
-about: 描述使用场景与需要解决的问题
+name: Feature request / 功能建议
+about: Describe a workflow and the problem you want to solve
 ---
 
-**使用场景**
+English and 简体中文 are welcome. 请只使用合成示例。
 
-**现在遇到的问题**
+**Workflow / 使用场景**
 
-**希望的行为与验收方式**
+**Current friction / 当前问题**
 
-请只使用合成示例，不提交真实部署或业务数据。
+**Desired behavior and how to verify it / 预期行为与验证方式**

@@ -12,7 +12,8 @@ import sys
 import threading
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from engine import Manager, VERSION, redact
+from engine import DisplayError, Manager, VERSION, redact
+from localization import engine_message, tr, use_language
 
 
 def main():
@@ -52,6 +53,10 @@ def main():
                 pass
 
     def handle(request):
+        with use_language(request.get('language')):
+            respond(request)
+
+    def respond(request):
         id=request.get('id')
         try:
             method=request.get('method');params=request.get('params') or {}
@@ -70,22 +75,26 @@ def main():
                 result=manager.sync(undo=params['mode']=='undo')
             else:raise ValueError('不支持的本机操作')
             emit(dict(id=id,ok=True,result=result))
-        except (ValueError,RuntimeError) as error:
-            emit(dict(id=id,ok=False,error=redact(str(error))))
         except PermissionError:
-            emit(dict(id=id,ok=False,error='读取部署目录需要文件夹访问权限。请在系统设置的「隐私与安全性 → 文件与文件夹」中检查唤醒的权限，然后重新检测。'))
+            emit(dict(id=id,ok=False,error=tr('读取部署目录需要文件夹访问权限。请在系统设置的「隐私与安全性 → 文件与文件夹」中检查唤醒的权限，然后重新检测。')))
+        except DisplayError as error:
+            emit(dict(id=id,ok=False,error=redact(str(error))))
+        except json.JSONDecodeError:
+            emit(dict(id=id,ok=False,error=tr('本地产品清单不是有效的 JSON。请修正格式后刷新。')))
+        except (ValueError,RuntimeError) as error:
+            emit(dict(id=id,ok=False,error=redact(engine_message(str(error)))))
         except Exception:
-            emit(dict(id=id,ok=False,error='操作未完成，请检查部署配置或查看本机日志。'))
+            emit(dict(id=id,ok=False,error=tr('操作未完成，请检查部署配置或查看本机日志。')))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         for line in sys.stdin:
             if len(line)>32768:
-                emit(dict(id=None,ok=False,error='请求过长'));continue
+                emit(dict(id=None,ok=False,error=tr('请求过长')));continue
             try:
                 request=json.loads(line)
                 if not isinstance(request,dict) or not isinstance(request.get('id'),str):raise ValueError()
                 pool.submit(handle,request)
-            except (ValueError,TypeError):emit(dict(id=None,ok=False,error='请求格式无效'))
+            except (ValueError,TypeError):emit(dict(id=None,ok=False,error=tr('请求格式无效')))
 
 
 if __name__=='__main__':main()

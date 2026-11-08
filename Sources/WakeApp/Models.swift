@@ -27,7 +27,7 @@ struct Product: Decodable, Identifiable, Equatable {
 
     var portText: String {
         if !ports.isEmpty { return ports.map(String.init).joined(separator: " / ") }
-        return kind == "app" ? "桌面应用" : kind == "launchd" ? "后台任务" : "无服务端口"
+        return kind == "app" ? l("Desktop app") : kind == "launchd" ? l("Background job") : l("No service port")
     }
 
     var symbol: String {
@@ -40,7 +40,15 @@ struct Product: Decodable, Identifiable, Equatable {
 }
 
 enum Filter: String, CaseIterable, Identifiable {
-    case all = "全部产品", running = "运行中", ready = "可唤醒", attention = "待处理"
+    case all, running, ready, attention
+    var title: String {
+        switch self {
+        case .all: return l("All")
+        case .running: return l("Running")
+        case .ready: return l("Ready")
+        case .attention: return l("Attention")
+        }
+    }
     var id: Self { self }
 }
 
@@ -94,7 +102,15 @@ final class WakeStore: ObservableObject {
 
     init(bridge: ServiceBridge) { self.bridge = bridge }
 
-    func refresh(manual: Bool = false) async {
+    func languageChanged() async {
+        noticeTask?.cancel()
+        notice = nil
+        error = nil
+        report = nil
+        await refresh(manual: true, announce: false)
+    }
+
+    func refresh(manual: Bool = false, announce: Bool = true) async {
         guard !loading else {
             refreshAgain = refreshAgain || manual
             return
@@ -107,49 +123,59 @@ final class WakeStore: ObservableObject {
                 Task { await refresh(manual: true) }
             }
         }
+        let language = WakeLanguage.current
         do {
             info = try await bridge.request("info", as: EngineInfo.self)
-            let snapshot = try await bridge.request("products", parameters: ["refresh": manual], as: Inventory.self)
+            let snapshot = try await bridge.request("products", parameters: ["refresh": manual], language: language, as: Inventory.self)
+            guard language == WakeLanguage.current else { refreshAgain = true; return }
             apply(snapshot)
-            if manual {
-                show(portIssues.isEmpty ? "已更新部署、运行状态与端口" : "已更新状态与端口 · \(portIssues.count) 个端口提醒")
+            if manual && announce {
+                show(portIssues.isEmpty ? l("Deployment, status, and ports refreshed") : l("Status and ports refreshed · Port alerts: %@", String(portIssues.count)))
             }
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            if language == WakeLanguage.current { self.error = error.localizedDescription }
+        }
     }
 
     func perform(_ id: String, _ action: String, autoOpen: Bool = true, approval: String? = nil) async {
         guard !busy.contains(id) else { return }
         busy.insert(id)
         defer { busy.remove(id) }
+        let language = WakeLanguage.current
         do {
             var parameters: [String: Any] = ["id": id, "action": action, "open": autoOpen]
             if let approval { parameters["approval"] = approval }
-            let result = try await bridge.request("action", parameters: parameters, as: ActionResult.self)
-            show(result.message)
+            let result = try await bridge.request("action", parameters: parameters, language: language, as: ActionResult.self)
+            if language == WakeLanguage.current { show(result.message) }
             if ["start", "stop", "open"].contains(action) { await refresh() }
-        } catch { show(error.localizedDescription) }
+        } catch { if language == WakeLanguage.current { show(error.localizedDescription) } }
     }
 
     func synchronize(undo: Bool = false) async {
         guard !syncing else { return }
         syncing = true
         defer { syncing = false }
+        let language = WakeLanguage.current
         do {
-            let result = try await bridge.request("sync", parameters: ["mode": undo ? "undo" : "sync"], as: SyncResult.self)
-            let snapshot = try await bridge.request("products", parameters: ["refresh": true], as: Inventory.self)
-            apply(snapshot)
+            let result = try await bridge.request("sync", parameters: ["mode": undo ? "undo" : "sync"], language: language, as: SyncResult.self)
+            let snapshotLanguage = WakeLanguage.current
+            let snapshot = try await bridge.request("products", parameters: ["refresh": true], language: snapshotLanguage, as: Inventory.self)
+            if snapshotLanguage == WakeLanguage.current { apply(snapshot) }
+            else { await refresh(manual: true, announce: false) }
+            guard language == WakeLanguage.current else { return }
             reportCanUndo = result.can_undo == true
             report = result.report
             if let message = result.message { show(message) }
-        } catch { show(error.localizedDescription) }
+        } catch { if language == WakeLanguage.current { show(error.localizedDescription) } }
     }
 
     func setScanRoots(_ roots: [String]) async {
+        let language = WakeLanguage.current
         do {
-            let result = try await bridge.request("scan-roots", parameters: ["roots": roots], as: ActionResult.self)
-            show(result.message)
+            let result = try await bridge.request("scan-roots", parameters: ["roots": roots], language: language, as: ActionResult.self)
+            if language == WakeLanguage.current { show(result.message) }
             await refresh(manual: true)
-        } catch { show(error.localizedDescription) }
+        } catch { if language == WakeLanguage.current { show(error.localizedDescription) } }
     }
 
     func monitor() async {

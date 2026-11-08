@@ -1,17 +1,11 @@
-# 唤醒 Wake 1.0
+## Wake 1.1 — English by default
 
-本地项目，一处唤醒。唤醒把自部署工程的发现、启动和状态检查放进同一个 macOS 工作台。
+Wake is an open-source macOS workbench for discovering, launching, and managing local projects. **English is now the default.** Switch to Simplified Chinese in **Settings → Language** while your services keep running. The repository now opens in English, with Chinese docs and new screenshots made from synthetic projects.
 
-- **自动发现工程。** 选择产品根目录，递归扫描其中可识别的 Node.js、Python、Docker Compose、启动脚本和显式清单。检测同步会更新项目卡片，并提供最近一次同步的撤销入口。
-- **集中启动和管理。** 在卡片里查看运行状态、端口和启动日志，审查命令后唤醒服务，打开本机页面，停止归属已核验的进程。平时无需重复输入启动命令或请 AI 代操作。
-- **减少日常操作的 token 消耗。** 扫描、查状态和启停在本机执行，这些操作无需调用模型。
+- **Discover** supported projects across a selected folder tree. Scan & Sync updates the inventory as deployments change.
+- **Launch and manage** projects in one place. Review commands, start services, open local pages, check ports and logs, and stop verified processes.
+- **Save AI tokens** on routine operations. Discovery, status checks, and service controls run locally without model calls.
 
-## 获取和体验
+**Get started:** download the source below, follow the [build guide](https://github.com/louisfy/wake/blob/v1.1/docs/build.md), and try **examples/demo-service**. Builds target Apple Silicon and require the macOS 26 SDK. macOS 14 is the minimum deployment target; older systems require separate runtime validation. This release provides source under MIT. Local builds use ad hoc signing by default.
 
-1.0 是 MIT 许可的源码首发。下载本版本源码，按照仓库中的构建说明在 Apple Silicon Mac 上生成应用包。构建后运行 `Preview.command`，选择 `examples/demo-service`，即可体验检测、启动审查和唤醒流程。
-
-构建需要包含 macOS 26 SDK 的 Xcode 或 Command Line Tools，以及 `zstd`。最低部署目标为 macOS 14，旧系统的实际兼容性仍需单独验证。当前 Release 提供源码归档，正式公证的 macOS 安装包另行发布。
-
-## 本地数据
-
-默认产品清单和扫描范围为空。配置、信任记录和日志保存在本机。README 的截图来自独立的合成示例工程。
+**中文说明**：1.1 默认英文，在「设置 → 语言」可即时切换简体中文。扫描选定目录发现工程，在一个工作台查看状态和端口、启动或停止服务；日常操作无需调用模型。[中文文档](https://github.com/louisfy/wake/blob/v1.1/README.zh-CN.md) · [English README](https://github.com/louisfy/wake/blob/v1.1/README.md)

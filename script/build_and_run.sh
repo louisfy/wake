@@ -3,8 +3,8 @@ set -euo pipefail
 
 workspace="$(cd "$(dirname "$0")/.." && pwd)"
 build_dir="$workspace/.build-native"
-archive="$workspace/dist/Wake-1.0-macos-arm64.zip"
-installed="/Applications/唤醒.app"
+archive="$workspace/dist/Wake-1.1-macos-arm64.zip"
+installed="/Applications/Wake.app"
 bundle_id="${WAKE_BUNDLE_ID:-dev.wake.launcher}"
 sign_identity="${WAKE_CODESIGN_IDENTITY:--}"
 mode="${1:---build-only}"
@@ -45,13 +45,15 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
-staged_bundle="$stage/唤醒.app"
+staged_bundle="$stage/Wake.app"
 contents="$staged_bundle/Contents"
 resources="$contents/Resources"
 mkdir -p "$contents/MacOS" "$resources/Core" "$resources/Python/bin" "$resources/Licenses" "$stage/Wake.iconset"
 cp "$binary" "$contents/MacOS/Wake"
 /usr/bin/strip -S "$contents/MacOS/Wake"
 cp "$workspace"/Core/*.py "$resources/Core/"
+cp "$workspace/Core/messages.en.json" "$resources/Core/"
+cp -R "$workspace/Resources/zh-Hans.lproj" "$resources/"
 cp "$workspace/Resources/products.seed.json" "$workspace/Resources/migration.json" "$resources/"
 cp "$workspace/LICENSE" "$workspace/THIRD_PARTY_NOTICES.md" "$resources/Licenses/"
 cp "$workspace/runtime.lock.json" "$resources/"
@@ -64,13 +66,14 @@ shutil.copytree(source/'lib', resources/'Python/lib', symlinks=True,
     ignore=shutil.ignore_patterns('site-packages','__pycache__','*.pyc','test','tests','idlelib','ensurepip','pkgconfig','*.a',
                                  'tcl*','tk*','Tix*','libtcl*','libtk*','_tkinter*'))
 shutil.copytree(source/'upstream-licenses',resources/'Licenses/Python-dependencies')
-info=dict(CFBundleIdentifier=sys.argv[3],CFBundleName='唤醒',CFBundleDisplayName='唤醒',
+info=dict(CFBundleIdentifier=sys.argv[3],CFBundleName='Wake',CFBundleDisplayName='Wake',
     CFBundleExecutable='Wake',CFBundlePackageType='APPL',CFBundleIconFile='AppIcon',
-    CFBundleShortVersionString='1.0',CFBundleVersion='100',LSMinimumSystemVersion='14.0',
+    CFBundleShortVersionString='1.1',CFBundleVersion='110',LSMinimumSystemVersion='14.0',
     NSPrincipalClass='NSApplication',NSHighResolutionCapable=True,
-    LSApplicationCategoryType='public.app-category.utilities',CFBundleDevelopmentRegion='zh_CN',
-    NSDocumentsFolderUsageDescription='唤醒读取你选择的本地产品目录，以检测和启动服务。',
-    NSDownloadsFolderUsageDescription='唤醒读取你选择的本地产品目录，以检测和启动服务。',
+    LSApplicationCategoryType='public.app-category.utilities',CFBundleDevelopmentRegion='en',
+    CFBundleLocalizations=['en','zh-Hans'],
+    NSDocumentsFolderUsageDescription='Wake reads the project folders you select to discover and start local services.',
+    NSDownloadsFolderUsageDescription='Wake reads the project folders you select to discover and start local services.',
     CFBundleURLTypes=[dict(CFBundleURLName=sys.argv[3]+'.open',CFBundleURLSchemes=['wake-launchpad'],CFBundleTypeRole='Viewer')])
 with (resources.parent/'Info.plist').open('wb') as file:plistlib.dump(info,file)
 PY
@@ -100,12 +103,20 @@ mv -f "$stage/Wake.zip" "$archive"
 (cd "$workspace/dist" && /usr/bin/shasum -a 256 "$(basename "$archive")" > SHA256SUMS.txt)
 
 if [[ "$mode" != --build-only ]]; then
+    legacy="/Applications/唤醒.app"
+    if [[ -d "$legacy" && ! -L "$legacy" ]] &&
+        [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$legacy/Contents/Info.plist" 2>/dev/null)" == "$bundle_id" ]]; then
+        if [[ -e "$installed" || -L "$installed" ]]; then
+            echo 'Both Wake.app and the legacy bundle exist. Keep only the intended installation before upgrading.' >&2; exit 1
+        fi
+        installed="$legacy"
+    fi
     if [[ -e "$installed" || -L "$installed" ]]; then
         if [[ -L "$installed" ]] || [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$installed/Contents/Info.plist")" != "$bundle_id" ]]; then
             echo 'Existing app has a different identity; no replacement performed.' >&2; exit 1
         fi
         if /usr/bin/pgrep -fx "$installed/Contents/MacOS/Wake" >/dev/null; then
-            echo 'Quit 唤醒 before installing.' >&2; exit 1
+            echo 'Quit Wake before installing.' >&2; exit 1
         fi
     fi
     install_stage="$(mktemp -d /Applications/.wake-install.XXXXXX)"

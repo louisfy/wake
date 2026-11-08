@@ -1,54 +1,48 @@
-# 构建与发行
+# Build and distribution
 
-## 环境
+[中文](zh-CN/build.md)
 
-- Apple Silicon Mac，当前仅生成 arm64 安装包。
-- Xcode / Command Line Tools，包含 macOS 26 SDK，Swift 6.2 或以上。
-- 系统构建 Python 3 和 `zstd` 解压工具，例如通过 `brew install zstd` 安装。
-- 首次构建需要访问公开 GitHub 发行地址，之后下载缓存可复用。
+## Requirements
 
-```sh
+- Apple Silicon Mac. The current build packages arm64.
+- Xcode or Command Line Tools with the macOS 26 SDK and Swift 6.2 or newer.
+- Python 3 and **zstd** for the build. Install zstd with **brew install zstd**.
+- Network access on the first build to download pinned public Python assets.
+
+~~~sh
 ./script/build_and_run.sh --build-only
-```
+~~~
 
-固定的运行时和同版本完整档案见 `runtime.lock.json`，下载后分别验证 SHA-256。完整档案只用于提取第三方许可证及构建元数据，应用实际使用 stripped install-only 运行时。若需更换，更新两份锁定信息并复核许可证，不能仅替换文件名。
+**runtime.lock.json** pins SHA-256 hashes for the runtime and the matching full archive. The full archive supplies licenses and build metadata. Wake bundles the smaller install-only runtime. The default build verifies downloads and caches them under **.build-native/**. For custom local builds, **WAKE_PYTHON_RUNTIME** may point to an equivalent prepared runtime with **upstream-licenses/**.
 
-可以用 `WAKE_PYTHON_RUNTIME` 指定具有相同目录结构及 `upstream-licenses/` 的已准备运行时；这属于本地自定义构建。公开发行使用默认的锁定运行时路径，不能借此把其他产品的私有文件打进包。
+## Outputs and app identity
 
-## 产物与标识
-
-默认标识 `dev.wake.launcher`，数据目录 `~/Library/Application Support/Wake/`。与历史个人安装隔离；源码不携带个人标识、旧配置路径或本地证书指纹。
-
-构建先映射 Swift 源路径并移除调试符号，再签名；ZIP 不保存 Finder 扩展属性、ACL 或 `__MACOSX`。检查器扫描源码与最终归档中的有限敏感模式，另需人工审查。
-
-```text
-dist/Wake-1.0-macos-arm64.zip
+~~~text
+dist/Wake-1.1-macos-arm64.zip
 dist/SHA256SUMS.txt
-```
+~~~
 
-`--build-only` 默认不安装。`--install` 和 `run` 才替换同标识的 `/Applications/唤醒.app`；正在运行或标识不同会拒绝替换。工作区仅保留 ZIP，避免多份 `.app` 被 Spotlight 注册。
+The package contains **Wake.app** with bundle ID **dev.wake.launcher**. Its default data directory is **~/Library/Application Support/Wake/**. The ID and directory remain stable from 1.0. Source paths are remapped, debug symbols stripped, and filesystem metadata excluded from the ZIP.
 
-## 本地签名与正式发行
+**--build-only** leaves the installed app alone. **--install** explicitly installs **/Applications/Wake.app**. If a 1.0 install exists at **/Applications/唤醒.app** with the same bundle ID, the script upgrades that copy in place. A different app identity is never overwritten. **run** installs and opens the app. **Preview.command** runs a temporary copy with separate data in **.local/preview-data/**.
 
-默认 ad hoc 签名，无需读取维护者钥匙串；它适合源码自构建和本机验证，不能当成已公证的软件发布。
+## Signing
 
-已有合适的 Developer ID 证书时，可使用：
+GitHub releases provide source. The default local build is ad hoc signed and has not been notarized. It needs no signing key. A maintainer with a Developer ID identity can build with:
 
-```sh
+~~~sh
 WAKE_CODESIGN_IDENTITY='Developer ID Application: YOUR PUBLISHER' \
 WAKE_SIGNING_MODE=release ./script/build_and_run.sh --build-only
-```
+~~~
 
-发布前需按 [Apple 官方说明](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)提交公证，验证结果，并 stapling 后重新打包和生成校验和。证书、私钥、Apple 登录信息及本机钥匙串配置均不进入源码。此仓库没有自动上传公证或自动发布的脚本。
+Before distributing a signed binary, follow [Apple's notarization instructions](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), verify and staple the ticket, then repackage and recalculate checksums. Keep credentials, private keys, and local signing setup outside the repository.
 
-Apple 签名身份可能展示证书持有者名称。若公开二进制的隐私边界尚未确定，可先验收并发布源码，不要上传个人本地签名版。
+## Checks
 
-## 检查
-
-```sh
+~~~sh
 python3 -B script/privacy_check.py --source
-python3 -B script/privacy_check.py --archive dist/Wake-1.0-macos-arm64.zip
+python3 -B script/privacy_check.py --archive dist/Wake-1.1-macos-arm64.zip
 python3 -B script/prepare_source.py
-```
+~~~
 
-对真实安装检查 `codesign --verify --deep --strict`；对正式发行另检查 Gatekeeper 与公证票据。源码、单元测试、打包、真实 UI 操作及其他系统兼容性是不同的验证层次。
+Check the built bundle with **codesign --verify --deep --strict**. For distribution, also check Gatekeeper and the notarization ticket. See [release acceptance](acceptance.md) for runtime and UI checks.

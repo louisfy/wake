@@ -98,9 +98,17 @@ private struct ProductCard: View, Equatable {
     let autoOpen: Bool
     let showDetails: () -> Void
 
+    let language: WakeLanguage
+    private var actionTitle: String {
+        if product.needs_approval == true && (product.can_start || product.can_open) { return l("Review") }
+        if product.can_open { return l("Open") }
+        if product.can_start { return l("Start") }
+        return l("Inspect")
+    }
+
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.product == rhs.product && lhs.busy == rhs.busy
-            && lhs.autoOpen == rhs.autoOpen && lhs.store === rhs.store
+            && lhs.autoOpen == rhs.autoOpen && lhs.language == rhs.language && lhs.store === rhs.store
     }
 
     var body: some View {
@@ -112,7 +120,7 @@ private struct ProductCard: View, Equatable {
                 HStack(spacing: 8) {
                     StatusLabel(product: product)
                     if let port = product.next_port {
-                        Text("预计 \(String(port))").font(.system(size: 10, design: .monospaced)).foregroundStyle(quiet).lineLimit(1)
+                        Text(l("Expected %@", String(port))).font(.system(size: 10, design: .monospaced)).foregroundStyle(quiet).lineLimit(1)
                     } else if !product.ports.isEmpty {
                         Text(product.portText).font(.system(size: 10, design: .monospaced)).foregroundStyle(quiet).lineLimit(1)
                     }
@@ -122,7 +130,7 @@ private struct ProductCard: View, Equatable {
             HStack(spacing: 8) {
                 if busy || product.status == "starting" {
                     Button {} label: { ProgressView().controlSize(.small) }
-                        .modifier(WakeButton(width: 62)).disabled(true).accessibilityLabel("正在唤醒 \(product.name)")
+                        .modifier(WakeButton(width: 62)).disabled(true).accessibilityLabel(l("Starting %@", product.name))
                 } else {
                     Button {
                         if product.needs_approval == true && (product.can_start || product.can_open) { showDetails() }
@@ -130,16 +138,16 @@ private struct ProductCard: View, Equatable {
                         else if product.can_start && product.needs_approval != true { perform("start") }
                         else { showDetails() }
                     } label: {
-                        Text(product.needs_approval == true && (product.can_start || product.can_open) ? "审查" : product.can_open ? "打开" : product.can_start ? "唤醒" : "检查")
+                        Text(actionTitle)
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .modifier(WakeButton(prominent: product.can_start && !product.can_open, width: 62))
-                    .accessibilityLabel("\(product.needs_approval == true && (product.can_start || product.can_open) ? "审查" : product.can_open ? "打开" : product.can_start ? "唤醒" : "检查") \(product.name)")
+                    .accessibilityLabel(l("%1$@: %2$@", actionTitle, product.name))
                 }
                 Button(action: showDetails) { Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold)) }
                     .modifier(WakeButton(width: 34))
-                    .help("查看部署与运行详情")
-                    .accessibilityLabel("查看 \(product.name) 的详情")
+                    .help(l("View deployment and service details"))
+                    .accessibilityLabel(l("Details for %@", product.name))
             }
         }
         .padding(.horizontal, 17)
@@ -176,6 +184,8 @@ private enum WakeSheet: Identifiable {
 
 struct WakeView: View {
     @ObservedObject var store: WakeStore
+    var onLanguageChange: () -> Void
+    @AppStorage(WakeLanguage.preferenceKey) private var language: WakeLanguage = .english
     @AppStorage("openAfterWake") private var autoOpen = true
     @WakeState private var filter = Filter.all
     @WakeState private var query = ""
@@ -209,7 +219,7 @@ struct WakeView: View {
                         ForEach(visible) { product in
                             ProductCard(product: product, busy: store.busy.contains(product.id),
                                         store: store, autoOpen: autoOpen,
-                                        showDetails: { present(.detail(product)) })
+                                        showDetails: { present(.detail(product)) }, language: language)
                                 .equatable()
                         }
                     }
@@ -223,7 +233,12 @@ struct WakeView: View {
         .background(Color.white)
         .foregroundStyle(ink)
         .preferredColorScheme(.light)
+        .environment(\.locale, language.locale)
         .task { await store.monitor() }
+        .onChange(of: language) { _, _ in
+            onLanguageChange()
+            Task { await store.languageChanged() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .wakeSettings)) { _ in present(.settings) }
         .onReceive(NotificationCenter.default.publisher(for: .wakeSearch)) { _ in searchFocused = true }
         .onReceive(NotificationCenter.default.publisher(for: .wakeRefresh)) { _ in Task { await store.refresh(manual: true) } }
@@ -274,23 +289,23 @@ struct WakeView: View {
                 .frame(width: 44, height: 44)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("唤醒").font(.system(size: 26, weight: .semibold))
-                Text("本地产品工作台").font(.system(size: 12)).foregroundStyle(quiet)
+                Text(l("Wake")).font(.system(size: 26, weight: .semibold))
+                Text(l("Local project workbench")).font(.system(size: 12)).foregroundStyle(quiet)
             }
             Spacer()
             Button {
                 Task { await store.synchronize() }
             } label: {
-                Label(store.syncing ? "检测中" : "检测并同步", systemImage: "viewfinder").font(.system(size: 12, weight: .medium))
+                Label(store.syncing ? l("Scanning…") : l("Scan & Sync"), systemImage: "viewfinder").font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 3)
             }
             .modifier(WakeButton(width: 116))
             .disabled(store.syncing)
-            .help("扫描本机部署并同步服务清单")
+            .help(l("Discover local deployments and sync the project list"))
             Button { Task { await store.refresh(manual: true) } } label: { Image(systemName: "arrow.clockwise").frame(width: 15) }
-                .modifier(WakeButton(width: 34)).help("刷新服务状态").accessibilityLabel("刷新服务状态")
+                .modifier(WakeButton(width: 34)).help(l("Refresh service status")).accessibilityLabel(l("Refresh service status"))
             Button { present(.settings) } label: { Image(systemName: "gearshape").frame(width: 15) }
-                .modifier(WakeButton(width: 34)).help("唤醒设置").accessibilityLabel("唤醒设置")
+                .modifier(WakeButton(width: 34)).help(l("Settings")).accessibilityLabel(l("Settings"))
         }
         .controlSize(.regular)
         .padding(.horizontal, 30)
@@ -302,11 +317,11 @@ struct WakeView: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").foregroundStyle(quiet)
-                TextField("搜索产品、功能或端口", text: $query).textFieldStyle(.plain).font(.system(size: 13))
-                    .focused($searchFocused).accessibilityLabel("搜索产品、功能或端口")
+                TextField(l("Search projects, descriptions, or ports"), text: $query).textFieldStyle(.plain).font(.system(size: 13))
+                    .focused($searchFocused).accessibilityLabel(l("Search projects, descriptions, or ports"))
                 if !query.isEmpty {
                     Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(quiet) }
-                        .buttonStyle(.plain).accessibilityLabel("清除搜索")
+                        .buttonStyle(.plain).accessibilityLabel(l("Clear search"))
                 } else { Text("⌘ F").font(.system(size: 11, weight: .medium)).foregroundStyle(quiet) }
             }
             .padding(.horizontal, 13).frame(height: 39)
@@ -318,12 +333,12 @@ struct WakeView: View {
                     let count = item == .all ? store.products.count : store.products.filter { $0.group == item }.count
                     Button { filter = item } label: {
                         HStack(spacing: 6) {
-                            Text(item.rawValue).fontWeight(filter == item ? .semibold : .regular)
+                            Text(item.title).fontWeight(filter == item ? .semibold : .regular)
                             if store.checked != nil { Text(count.formatted()).monospacedDigit().foregroundStyle(quiet) }
                         }
                         .font(.system(size: 12)).padding(.horizontal, 3)
                     }
-                    .modifier(WakeButton(width: 88, height: 30, selected: filter == item)).controlSize(.small)
+                    .modifier(WakeButton(width: language == .english ? 94 : 88, height: 30, selected: filter == item)).controlSize(.small)
                     .accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
                 Spacer()
@@ -332,7 +347,7 @@ struct WakeView: View {
                 }
                 if !store.portIssues.isEmpty {
                     Button { present(.ports) } label: {
-                        Label("端口检查 \(store.portIssues.count)", systemImage: "point.3.connected.trianglepath.dotted")
+                        Label(l("Ports %@", String(store.portIssues.count)), systemImage: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .modifier(WakeButton(height: 30))
@@ -346,19 +361,19 @@ struct WakeView: View {
         VStack(spacing: 10) {
             if store.loading && store.checked == nil { ProgressView().controlSize(.small) }
             else { Image(systemName: "magnifyingglass").font(.system(size: 22)).foregroundStyle(quiet) }
-            Text(store.checked == nil ? (store.error == nil ? "正在读取本地产品" : "暂时无法读取产品") : store.products.isEmpty ? (store.scanRoots.isEmpty ? "选择本地产品所在的文件夹" : "扫描所选文件夹，发现本地产品") : "没有符合条件的产品")
+            Text(store.checked == nil ? (store.error == nil ? l("Loading local projects") : l("Could not load projects")) : store.products.isEmpty ? (store.scanRoots.isEmpty ? l("Choose a folder containing your projects") : l("Scan your selected folders to discover projects")) : l("No matching projects"))
                 .font(.system(size: 15, weight: .semibold))
             if store.error != nil {
-                Button("重新检测") { Task { await store.refresh(manual: true) } }.modifier(WakeButton())
+                Button(l("Retry")) { Task { await store.refresh(manual: true) } }.modifier(WakeButton())
             } else if store.checked != nil && store.products.isEmpty && store.scanRoots.isEmpty {
-                Text("只扫描你选择的位置；发现产品后，首次唤醒前会展示启动命令。")
+                Text(l("Wake scans only the folders you select. You can review each command before its first launch."))
                     .font(.system(size: 12)).foregroundStyle(quiet)
-                Button("选择文件夹") { chooseFolder() }.modifier(WakeButton(prominent: true))
+                Button(l("Choose Folder")) { chooseFolder() }.modifier(WakeButton(prominent: true))
             } else if store.checked != nil && store.products.isEmpty {
-                Button("检测同步") { Task { await store.synchronize() } }
+                Button(l("Scan & Sync")) { Task { await store.synchronize() } }
                     .modifier(WakeButton(prominent: true)).disabled(store.syncing)
             } else if store.checked != nil {
-                Button("查看全部") { query = ""; filter = .all }.modifier(WakeButton())
+                Button(l("Show All")) { query = ""; filter = .all }.modifier(WakeButton())
             }
         }
         .padding(.top, 65).frame(maxWidth: .infinity)
@@ -366,10 +381,10 @@ struct WakeView: View {
 
     private var footer: some View {
         HStack {
-            Label("仅在此 Mac 运行", systemImage: "laptopcomputer")
+            Label(l("Runs on this Mac"), systemImage: "laptopcomputer")
             Spacer()
-            if let checked = store.checked { Text("最近检测 \(checked.formatted(date: .omitted, time: .standard))") }
-            Text("\(store.products.count) 个产品").monospacedDigit()
+            if let checked = store.checked { Text(l("Last checked %@", checked.formatted(Date.FormatStyle(date: .omitted, time: .standard, locale: language.locale)))) }
+            Text(l("Projects: %@", store.products.count.formatted())).monospacedDigit()
         }
         .font(.system(size: 11)).foregroundStyle(quiet)
         .padding(.horizontal, 30).padding(.vertical, 13)
@@ -379,12 +394,22 @@ struct WakeView: View {
 
     private var preferences: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("唤醒设置").font(.system(size: 21, weight: .semibold))
-            Toggle("产品就绪后自动打开", isOn: $autoOpen).toggleStyle(.switch).tint(actionBlue)
+            Text(l("Settings")).font(.system(size: 21, weight: .semibold))
+            VStack(alignment: .leading, spacing: 7) {
+                Picker(l("Language"), selection: $language) {
+                    ForEach(WakeLanguage.allCases, id: \.self) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(l("Language changes apply immediately. Running services keep their state."))
+                    .font(.system(size: 11)).foregroundStyle(quiet)
+            }
+            Toggle(l("Open projects when ready"), isOn: $autoOpen).toggleStyle(.switch).tint(actionBlue)
             Divider()
             VStack(alignment: .leading, spacing: 7) {
-                Text("自动扫描位置").fontWeight(.medium)
-                if store.scanRoots.isEmpty { Text("尚未选择文件夹").font(.system(size: 12)).foregroundStyle(quiet) }
+                Text(l("Scan folders")).fontWeight(.medium)
+                if store.scanRoots.isEmpty { Text(l("No folders selected")).font(.system(size: 12)).foregroundStyle(quiet) }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(store.scanRoots, id: \.self) { root in
@@ -393,20 +418,20 @@ struct WakeView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 Button { Task { await store.setScanRoots(store.scanRoots.filter { $0 != root }) } } label: {
                                     Image(systemName: "minus").frame(width: 12)
-                                }.modifier(WakeButton(width: 30, height: 30)).accessibilityLabel("移除扫描位置 \(root)")
+                                }.modifier(WakeButton(width: 30, height: 30)).accessibilityLabel(l("Remove scan folder %@", root))
                             }
                         }
                     }
                 }.frame(maxHeight: 160)
-                Button("添加文件夹") { chooseFolder() }.modifier(WakeButton()).disabled(store.syncing)
-                Text("移除扫描位置不会删除产品文件或已有卡片。")
+                Button(l("Add Folder")) { chooseFolder() }.modifier(WakeButton()).disabled(store.syncing)
+                Text(l("Removing a scan folder keeps its files and existing project cards."))
                     .font(.system(size: 11)).foregroundStyle(quiet)
             }
             HStack {
-                Button("编辑产品清单") { Task { await store.perform("settings", "config") } }.modifier(WakeButton())
-                Button("打开数据文件夹") { NSWorkspace.shared.open(store.dataDirectory) }.modifier(WakeButton())
+                Button(l("Edit Inventory")) { Task { await store.perform("settings", "config") } }.modifier(WakeButton())
+                Button(l("Open Data Folder")) { NSWorkspace.shared.open(store.dataDirectory) }.modifier(WakeButton())
                 Spacer()
-                Button("完成", action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
+                Button(l("Done"), action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
             }
         }
         .padding(24).frame(width: 490)
@@ -414,8 +439,8 @@ struct WakeView: View {
 
     private func chooseFolder() {
         let panel = NSOpenPanel()
-        panel.title = "选择本地产品所在的文件夹"
-        panel.prompt = "添加扫描位置"
+        panel.title = l("Choose a folder containing your projects")
+        panel.prompt = l("Add Folder")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -426,34 +451,34 @@ struct WakeView: View {
 
     private func reportView(_ report: SyncResult.Report) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("检测与同步完成").font(.system(size: 21, weight: .semibold))
-            Text("扫描 \(report.scanned_directories) 个目录 · 现有 \(report.total) 个产品").foregroundStyle(quiet)
+            Text(l("Scan & sync complete")).font(.system(size: 21, weight: .semibold))
+            Text(l("Folders scanned: %@ · Projects: %@", report.scanned_directories.formatted(), report.total.formatted())).foregroundStyle(quiet)
             HStack(spacing: 11) {
-                countCell(report.added.count, "新增")
-                countCell(report.updated.count, "更新")
-                countCell(report.removed.count, "移除")
+                countCell(report.added.count, l("Added"))
+                countCell(report.updated.count, l("Updated"))
+                countCell(report.removed.count, l("Removed"))
             }
             if report.added.isEmpty && report.updated.isEmpty && report.removed.isEmpty {
-                Text("清单已是最新。").foregroundStyle(quiet)
+                Text(l("The project list is up to date.")).foregroundStyle(quiet)
             }
             if !report.added.isEmpty || !report.updated.isEmpty || !report.removed.isEmpty || !report.warnings.isEmpty || !store.portIssues.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        changes("新增服务", report.added)
-                        changes("更新信息", report.updated)
-                        changes("移除卡片", report.removed)
+                        changes(l("New projects"), report.added)
+                        changes(l("Updated projects"), report.updated)
+                        changes(l("Removed cards"), report.removed)
                         ForEach(report.warnings, id: \.self) { Text($0).font(.system(size: 11)).foregroundStyle(quiet) }
                         if !store.portIssues.isEmpty {
-                            Text("端口检查").font(.system(size: 12, weight: .semibold))
+                            Text(l("Port Checks")).font(.system(size: 12, weight: .semibold))
                             portRows
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxHeight: 270)
             }
             HStack {
-                if store.canUndo { Button("撤销本次同步") { Task { await store.synchronize(undo: true) } }.modifier(WakeButton()).disabled(store.syncing) }
+                if store.canUndo { Button(l("Undo Sync")) { Task { await store.synchronize(undo: true) } }.modifier(WakeButton()).disabled(store.syncing) }
                 Spacer()
-                Button("完成", action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
+                Button(l("Done"), action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
             }
         }
         .padding(24).frame(width: 490)
@@ -461,8 +486,8 @@ struct WakeView: View {
 
     private var portReview: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("端口检查").font(.system(size: 21, weight: .semibold))
-            Text("已运行的产品会继续使用当前端口。可切换的产品在唤醒前会再确认端口是否空闲。")
+            Text(l("Port Checks")).font(.system(size: 21, weight: .semibold))
+            Text(l("Running projects keep their ports. For projects that can switch ports, Wake checks availability again before launch."))
                 .font(.system(size: 12)).foregroundStyle(quiet)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) { portRows }
@@ -470,7 +495,7 @@ struct WakeView: View {
             }.frame(maxHeight: 320)
             HStack {
                 Spacer()
-                Button("完成", action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
+                Button(l("Done"), action: dismissSheet).modifier(WakeButton(prominent: true)).keyboardShortcut(.defaultAction)
             }
         }
         .padding(24).frame(width: 490)
@@ -481,10 +506,10 @@ struct WakeView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(String(issue.port)).font(.system(size: 13, weight: .semibold, design: .monospaced))
                 if issue.products.count > 1 {
-                    Text("共用配置 · \(issue.products.joined(separator: "、"))")
+                    Text(l("Shared by %@", wakeList(issue.products)))
                 }
                 if !issue.blocked.isEmpty {
-                    Text("当前被占用 · 影响 \(issue.blocked.joined(separator: "、"))")
+                    Text(l("In use · Affects %@", wakeList(issue.blocked)))
                 }
             }.font(.system(size: 12)).foregroundStyle(quiet)
         }
@@ -528,23 +553,23 @@ private struct DetailView: View {
                 }
                 Spacer()
                 Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 14) }
-                    .modifier(WakeButton(width: 34)).accessibilityLabel("关闭详情").keyboardShortcut(.cancelAction)
+                    .modifier(WakeButton(width: 34)).accessibilityLabel(l("Close details")).keyboardShortcut(.cancelAction)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     StatusLabel(product: current)
                     Text(current.reason).font(.system(size: 12)).foregroundStyle(quiet).fixedSize(horizontal: false, vertical: true)
                     Divider()
-                    row("部署位置", current.root)
-                    row("服务端口", current.portText)
-                    if let url = current.url { row("本机地址", url) }
-                    if let portNote = current.port_note { row("端口检测", portNote) }
-                    if !current.pids.isEmpty { row("进程", current.pids.map(String.init).joined(separator: ", ")) }
+                    row(l("Project folder"), current.root)
+                    row(l("Service ports"), current.portText)
+                    if let url = current.url { row(l("Local address"), url) }
+                    if let portNote = current.port_note { row(l("Port check"), portNote) }
+                    if !current.pids.isEmpty { row(l("Processes"), current.pids.map(String.init).joined(separator: ", ")) }
                     if !current.checks.isEmpty {
                         Divider()
-                        Text("部署检查").font(.system(size: 12, weight: .semibold))
+                        Text(l("Deployment checks")).font(.system(size: 12, weight: .semibold))
                         ForEach(Array(current.checks.enumerated()), id: \.offset) { _, check in
-                            Label(check.ok ? check.label : "\(check.label) · 未找到", systemImage: check.ok ? "checkmark" : "exclamationmark.circle")
+                            Label(check.ok ? check.label : l("%@ · Missing", check.label), systemImage: check.ok ? "checkmark" : "exclamationmark.circle")
                                 .font(.system(size: 11)).foregroundStyle(quiet).help(check.path)
                         }
                     }
@@ -553,8 +578,8 @@ private struct DetailView: View {
                     }
                     if current.needs_approval == true && (current.can_start || current.can_open) {
                         Divider()
-                        Text("首次操作确认").font(.system(size: 12, weight: .semibold))
-                        Text("确认你信任此目录中的代码。唤醒将以你的用户权限运行以下入口；后续启动配置变化时会再次确认。")
+                        Text(l("Review before first launch")).font(.system(size: 12, weight: .semibold))
+                        Text(l("Only continue if you trust the code in this folder. Wake runs the command below with your user permissions and asks again if the launch configuration changes."))
                             .font(.system(size: 12)).foregroundStyle(quiet)
                         if let command = current.command_preview {
                             Text(command).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
@@ -565,18 +590,18 @@ private struct DetailView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 360)
             HStack {
-                Button("在 Finder 显示") { perform("reveal") }.modifier(WakeButton())
-                Button("启动日志") { perform("log") }.modifier(WakeButton())
-                if current.can_stop { Button("停止服务", role: .destructive) { perform("stop") }.modifier(WakeButton()) }
+                Button(l("Show in Finder")) { perform("reveal") }.modifier(WakeButton())
+                Button(l("Launch Log")) { perform("log") }.modifier(WakeButton())
+                if current.can_stop { Button(l("Stop Service"), role: .destructive) { perform("stop") }.modifier(WakeButton()) }
                 Spacer()
                 if current.can_open {
-                    Button(current.needs_approval == true ? "信任并打开" : "打开") {
+                    Button(current.needs_approval == true ? l("Trust & Open") : l("Open")) {
                         Task { await store.perform(current.id, "open", autoOpen: autoOpen,
                                                   approval: current.needs_approval == true ? current.approval_fingerprint : nil) }
                     }.modifier(WakeButton(prominent: true))
                 }
                 else if current.can_start {
-                    Button(current.needs_approval == true ? "信任并唤醒" : "唤醒") {
+                    Button(current.needs_approval == true ? l("Trust & Start") : l("Start")) {
                         Task { await store.perform(current.id, "start", autoOpen: autoOpen,
                                                   approval: current.needs_approval == true ? current.approval_fingerprint : nil) }
                     }.modifier(WakeButton(prominent: true))
@@ -588,7 +613,7 @@ private struct DetailView: View {
 
     private func row(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label).foregroundStyle(quiet).frame(width: 63, alignment: .leading)
+            Text(label).foregroundStyle(quiet).frame(width: 81, alignment: .leading)
             Text(value).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }.font(.system(size: 11))
     }

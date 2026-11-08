@@ -1,0 +1,4 @@
+"CFBundleName" = "唤醒";
+"CFBundleDisplayName" = "唤醒";
+"NSDocumentsFolderUsageDescription" = "唤醒读取你选择的产品文件夹，以检测和启动本地服务。";
+"NSDownloadsFolderUsageDescription" = "唤醒读取你选择的产品文件夹，以检测和启动本地服务。";

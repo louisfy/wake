@@ -9,7 +9,7 @@ from public_files import public_files
 
 root=Path(__file__).resolve().parents[1]
 check_source(root)
-target=root/'dist/Wake-1.0-source.zip'
+target=root/'dist/Wake-1.1-source.zip'
 target.parent.mkdir(exist_ok=True)
 manifest={}
 with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as archive:
@@ -23,7 +23,7 @@ with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(info,data)
 check_archive(target)
 (target.parent/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n')
-binary=target.with_name('Wake-1.0-macos-arm64.zip')
+binary=target.with_name('Wake-1.1-macos-arm64.zip')
 (target.parent/'SHA256SUMS.txt').write_text(''.join(
     hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in (target,binary) if p.is_file()))
 print('Prepared audited source archive:',target.name)

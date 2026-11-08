@@ -1,36 +1,34 @@
-# 隐私说明
+# Privacy
 
-唤醒以本地优先方式运行。应用没有账户、遥测、分析 SDK、云端产品清单或自动上报功能。
+[中文](docs/zh-CN/PRIVACY.md)
 
-## 本机读取什么
+Wake runs locally. It has no account, telemetry, analytics SDK, cloud inventory, or automatic diagnostic uploads.
 
-- 用户选择的扫描目录中的部署描述，例如 `package.json`、Compose 文件、显式清单和部分服务入口文件。
-- 本机进程、监听端口和必要的工作目录，用于判断进程归属与冲突。进程命令可能包含敏感参数，只在本机处理，不作为完整列表提供给界面。
-- 已登记服务的本机 HTTP 入口，用于判断服务是否可访问；登录入口适配可能读取用户明确配置的本机入口文件。
-- Docker 与系统后台任务的状态，不为发现产品安装依赖、构建项目或拉取镜像。
+## What Wake reads
 
-扫描可能在内存中读到部署文件内的配置值。发现结果只提取启动和展示所需字段，不导出 `.env` 内容。源码清单中的命令、路径和产品名称本身仍可能敏感，属于本机数据。
+- Deployment metadata in the scan folders you choose, such as **package.json**, Compose files, explicit manifests, and supported service entry files.
+- Local processes, listening ports, and working directories to verify ownership and find conflicts. Process command lines can contain secrets; Wake handles them locally and does not show a full process listing.
+- Registered loopback HTTP endpoints for readiness checks. An explicitly configured sign-in adapter may read a local entry file.
+- Docker and system background job status. Discovery does not install dependencies, build projects, pull images, or run their commands.
 
-## 本机保存什么
+Deployment files can contain sensitive values. Wake extracts the fields needed to show or launch projects and does not export **.env** contents. Project names, commands, and paths in your inventory can still be private.
 
-默认数据目录为 `~/Library/Application Support/Wake/`，包含产品清单、运行记录、启动信任记录、同步备份和日志。可通过 `WAKE_DATA_DIR` 指定绝对路径，用于隔离测试。目录权限为当前用户私有；这不是数据加密。
+## What stays on this Mac
 
-原有个人安装的数据目录不会自动导入。开源版内置空产品清单和空扫描范围，不包含开发者个人部署。
+The default data directory is **~/Library/Application Support/Wake/**. It holds the project inventory, runtime records, launch trust, sync backups, and logs. **WAKE_DATA_DIR** can point to an absolute directory for isolated testing. The data directory uses user-only permissions; it is not encrypted by Wake. The language preference is saved locally in macOS app preferences.
 
-## 网络行为
+The open-source build starts with an empty inventory and no scan folders. It does not automatically import a separate personal installation.
 
-主应用和控制引擎通过继承的私有管道通信，不启动额外 HTTP 控制端口。服务状态检查访问已登记的本机地址。唤醒本身没有产品更新查询功能。
+## Network and execution
 
-用户启动的产品、Docker Desktop、浏览器和所执行的项目命令可能自行访问网络；这些行为由对应产品决定。构建脚本首次从固定官方 GitHub 地址下载公开 Python 运行时，不发送本地产品清单。
+The app talks to its engine over inherited pipes. There is no HTTP control listener or product update checker. Status checks use registered local addresses. Projects you run, Docker Desktop, and your browser can make their own network requests. The first build fetches pinned public runtime assets and does not send your inventory.
 
-## 启动信任与日志
+Wake asks you to review a launch command before first execution and stores trust against the launch configuration. A trusted project runs with your user permissions. Trust is not sandboxing or a guarantee that every future code change will be detected.
 
-发现项目不会自动执行项目的启动命令或依赖探测命令。首次启动需查看并确认启动入口，之后信任记录与配置指纹绑定。信任项目表示允许它以当前用户权限运行，不是沙箱，也不保证项目代码安全。代码内容变化不一定改变命令，请只信任自己了解的项目。
+## Logs and sharing
 
-项目标准输出可能包含凭据或业务内容，原始启动日志只保存在本机。界面错误消息会进行常见凭据脱敏，但这不代表原始日志已经脱敏。当前不提供自动诊断上传。提交 Issue 前请仅使用合成复现，勿粘贴真实日志、配置、完整本机路径或带凭据的截图。
+Project output may include credentials and business data. Raw logs remain on your Mac. Wake masks common credential patterns in UI errors; raw logs are not sanitized. Use synthetic reproduction steps and screenshots for public reports, and omit real paths, configuration, logs, and credentials.
 
-## 删除与公开
+You can remove Wake's stored inventory, trust, and logs by removing its data directory after quitting. Back up anything you need first. This does not remove project files or stop independent services. To reset the language, use **Settings → Language**.
 
-删除唤醒数据目录可移除它保存的配置、信任和日志，不会删除产品源码或停止已经独立运行的服务。操作前自行备份需要保留的清单。
-
-源码与发行包采用空种子、文件白名单、敏感模式检查和人工审查。模式检查覆盖有限，不能替代提交前的实际内容审查。
+Source releases use an empty seed, a file allowlist, automated checks for known sensitive patterns, and review of the actual outgoing files.

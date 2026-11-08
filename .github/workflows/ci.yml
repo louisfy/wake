@@ -29,4 +29,4 @@ jobs:
           python3 -B script/privacy_check.py --source
           ./script/build_and_run.sh --build-only
           python3 -B script/prepare_source.py
-          python3 -B script/privacy_check.py --archive dist/Wake-1.0-macos-arm64.zip
+          python3 -B script/privacy_check.py --archive dist/Wake-1.1-macos-arm64.zip
