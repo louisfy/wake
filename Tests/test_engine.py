@@ -232,8 +232,12 @@ class Tests(unittest.TestCase):
             listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
         path=self.root/'fixture.py'
         path.write_text('from http.server import HTTPServer,BaseHTTPRequestHandler\nclass H(BaseHTTPRequestHandler):\n def do_GET(self):\n  self.send_response(200);self.end_headers();self.wfile.write(b"ready")\n def log_message(self,*args):pass\nHTTPServer(("127.0.0.1",'+str(port)+'),H).serve_forever()\n')
-        self.p.update(ports=[port],url=f'http://127.0.0.1:{port}/',match=[[str(path)]])
+        # This test needs a direct child, independent of the system Python launch shim.
+        self.p.update(command=[sys.executable,'-B',str(path)],ports=[port],
+                      url=f'http://127.0.0.1:{port}/',match=[[str(path)]])
         self.manager.products={'fixture':self.p}
+        self.allow()
+        self.config.write_text(json.dumps(dict(products=[self.p])))
         self.assertTrue(self.manager.action('fixture','start',False)['queued'])
         deadline=time.monotonic()+20
         try:
