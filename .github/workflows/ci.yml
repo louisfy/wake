@@ -1,0 +1,32 @@
+name: Check and build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos-arm64:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check toolchain
+        run: |
+          swift --version
+          xcrun --show-sdk-version
+          if ! command -v zstd >/dev/null; then brew install zstd; fi
+      - name: Prepare pinned runtime
+        run: |
+          runtime_path="$(python3 -B script/fetch_runtime.py)"
+          printf 'WAKE_PYTHON_RUNTIME=%s\n' "$runtime_path" >> "$GITHUB_ENV"
+      - name: Test
+        run: '"$WAKE_PYTHON_RUNTIME/bin/python3.12" -B -m unittest discover -s Tests -q'
+      - name: Privacy and package
+        run: |
+          python3 -B script/privacy_check.py --source
+          ./script/build_and_run.sh --build-only
+          python3 -B script/prepare_source.py
+          python3 -B script/privacy_check.py --archive dist/Wake-1.0-macos-arm64.zip
